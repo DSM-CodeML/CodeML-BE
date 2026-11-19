@@ -1,18 +1,24 @@
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import { env } from "./config/env.js";
+import { sequelize } from "./config/db.js";
+import { authRouter } from "./routes/auth.routes.js";
+import { errorHandler, notFoundHandler } from "./middlewares/error.middleware.js";
 
-const app = express();
-const port = Number(process.env.PORT ?? 3000);
+export const app = express();
+app.disable("x-powered-by");
 
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL,
+    origin: env.allowedOrigins, // 정확히 일치하는 Origin에만 Access-Control-Allow-Origin 응답
     credentials: true,
   }),
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "16kb" }));
 app.use(cookieParser());
 
 app.get("/api/health", (req, res) => {
@@ -22,6 +28,21 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-});
+app.use("/api/auth", authRouter);
+
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+// `node src/app.js`(npm start/dev)로 직접 실행할 때만 서버를 띄운다. 테스트에서 import할 때는 띄우지 않는다.
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+if (isMain) {
+  try {
+    await sequelize.authenticate(); // DB 연결 확인 후 기동 (실패 시 바로 종료)
+  } catch (err) {
+    console.error("DB 연결 실패:", err.parent?.code ?? err.name, err.parent?.sqlMessage ?? "");
+    process.exit(1);
+  }
+  app.listen(env.port, () => {
+    console.log(`Server running on http://localhost:${env.port}`);
+  });
+}
