@@ -97,6 +97,14 @@ describe("recordActivity", () => {
     assert.equal(grass.days.find((d) => d.date === "2026-11-10").count, 1);
   });
 
+  it("대소문자만 다른 refId는 서로 다른 대상으로 각각 기록", async () => {
+    const { userId } = await newMember("grass-case");
+    assert.deepEqual(await recordActivity({ userId, type: TYPE, refId: "pA", at: atDay("2026-11-10") }), { created: true });
+    assert.deepEqual(await recordActivity({ userId, type: TYPE, refId: "pa", at: atDay("2026-11-10") }), { created: true });
+    const grass = await getGrass(userId, { now: NOW });
+    assert.equal(grass.days.find((d) => d.date === "2026-11-10").count, 2);
+  });
+
   it("다른 날 같은 문제는 각각 1건씩 기록", async () => {
     const { userId } = await newMember("grass-days");
     assert.deepEqual(await recordActivity({ userId, type: TYPE, refId: "p1", at: atDay("2026-11-10") }), { created: true });
