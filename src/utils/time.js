@@ -7,3 +7,21 @@ export function nowSeconds() {
 export function addSeconds(date, seconds) {
   return new Date(date.getTime() + seconds * 1000);
 }
+
+const KST_DATE = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Seoul",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+// Date → KST 기준 'YYYY-MM-DD'
+export function toKstDateString(date) {
+  return KST_DATE.format(date);
+}
+
+// 'YYYY-MM-DD' 에 일 수를 더한다. UTC 자정 기준으로 계산해서 서머타임/로컬 TZ 영향이 없다.
+export function addDaysToDateString(dateStr, days) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}

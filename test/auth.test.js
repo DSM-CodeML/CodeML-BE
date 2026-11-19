@@ -81,7 +81,8 @@ describe("스키마: 마이그레이션과 모델 일치", () => {
 
     const [fks] = await sequelize.query(
       `SELECT TABLE_NAME t, REFERENCED_TABLE_NAME r FROM information_schema.KEY_COLUMN_USAGE
-        WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY t`,
+        WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL
+          AND TABLE_NAME IN ('auth_sessions','refresh_tokens') ORDER BY t`, // 인증 테이블의 FK만 본다(다른 기능 테이블 제외)
     );
     assert.deepEqual(fks.map((f) => `${f.t}->${f.r}`), ["auth_sessions->users", "refresh_tokens->auth_sessions"]);
   });
