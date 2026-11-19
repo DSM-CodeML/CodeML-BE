@@ -16,6 +16,7 @@ import {
   hashRefreshToken,
   isWellFormedRefreshToken,
   signAccessToken,
+  SessionExpiredError,
 } from "./token.service.js";
 import { addSeconds, nowSeconds } from "../utils/time.js";
 
@@ -99,7 +100,7 @@ export async function issueLoginTokens(userId) {
  * 리프레시 토큰 회전(RTR).
  * @returns {Promise<
  *   | { ok: true, accessToken: string, expiresIn: number, refreshToken: string, refreshExpiresAt: Date }
- *   | { ok: false, reason: "invalid" | "reuse_detected" }
+ *   | { ok: false, reason: "invalid" | "reuse_detected" | "session_expired" }
  * >}
  * reuse_detected 인 경우 세션 폐기는 이미 COMMIT 된 상태다. 컨트롤러가 401을 응답한다.
  */
@@ -116,8 +117,6 @@ export async function rotateRefreshToken(rawToken) {
   // 예외(DB 장애 등)가 아닌 "업무상 거절"은 throw하지 않고 값으로 반환한다.
   // 그래야 재사용 감지 시의 세션 폐기 UPDATE가 롤백되지 않고 COMMIT 된다.
   const outcome = await sequelize.transaction(async (t) => {
-    const now = nowSeconds();
-
     // 2) 세션 행 먼저 잠금 (SELECT ... FOR UPDATE)
     const session = await AuthSession.findByPk(hint.sessionId, { transaction: t, lock: t.LOCK.UPDATE });
     // 3) 같은 순서로 토큰 행 잠금 재조회 — 처음 조회 결과를 믿지 않는다
@@ -127,9 +126,13 @@ export async function rotateRefreshToken(rawToken) {
       lock: t.LOCK.UPDATE,
     });
 
+    // 잠금 대기/조회에 시간이 걸렸을 수 있으므로 "잠금을 얻은 뒤의 현재 시각"으로 만료를 판단한다.
+    const now = nowSeconds();
+
     // 4) 세션 폐기/만료, 토큰 존재 확인
     if (!session || !token || token.sessionId !== session.id) return { ok: false, reason: "invalid" };
-    if (session.revokedAt !== null || session.expiresAt <= now) return { ok: false, reason: "invalid" };
+    if (session.revokedAt !== null) return { ok: false, reason: "invalid" };
+    if (session.expiresAt <= now) return { ok: false, reason: "session_expired" };
 
     // 5) 이미 사용된 토큰이 유효한 로그인에 다시 옴 = 탈취 의심 → 이 로그인 전체 폐기 (COMMIT됨)
     if (token.usedAt !== null) {
@@ -159,7 +162,15 @@ export async function rotateRefreshToken(rawToken) {
   if (!outcome.ok) return outcome;
 
   // 8) COMMIT 이후에만 새 액세스 JWT를 만든다 (만료는 세션 잔여 시간 이하)
-  const { accessToken, expiresIn } = signAccessToken(outcome);
+  // 커밋 도중 세션이 만료됐다면 예외 대신 만료 결과로 바꿔 컨트롤러의 401 + 쿠키 삭제 경로로 보낸다.
+  let signed;
+  try {
+    signed = signAccessToken(outcome);
+  } catch (err) {
+    if (err instanceof SessionExpiredError) return { ok: false, reason: "session_expired" };
+    throw err; // 그 밖의 서명 오류는 삼키지 않는다
+  }
+  const { accessToken, expiresIn } = signed;
   return {
     ok: true,
     accessToken,

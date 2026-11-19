@@ -376,6 +376,53 @@ describe("POST /api/auth/refresh (RTR)", () => {
     const cookieExpires = new Date(/Expires=([^;]+)/.exec(cookieFrom(res).raw)[1]);
     assert.equal(cookieExpires.getTime(), soon.getTime());
   });
+
+  // 처리 도중 시간이 흘러 세션이 만료되는 경우를 Date.now 를 앞당겨 재현한다.
+  async function expireDuring(target, method, sub, { before: advanceBefore = false } = {}) {
+    const u = await login(base, sub);
+    const s = await sessionOf(u.refreshToken);
+    const soon = new Date(Math.floor(Date.now() / 1000) * 1000 + 3_000); // 3초 뒤 만료
+    await s.update({ expiresAt: soon });
+    await RefreshToken.update({ expiresAt: soon }, { where: { sessionId: s.id } });
+
+    const realNow = Date.now.bind(Date);
+    let offset = 0;
+    const clock = mock.method(Date, "now", () => realNow() + offset);
+    const original = target[method].bind(target);
+    const spy = mock.method(target, method, async (...args) => {
+      if (advanceBefore) offset = 10_000;
+      const result = await original(...args);
+      if (!advanceBefore) offset = 10_000;
+      return result;
+    });
+    const errLog = mock.method(console, "error", () => {});
+    try {
+      return { u, res: await refresh(base, u.refreshToken), errLog };
+    } finally {
+      spy.mock.restore();
+      clock.mock.restore();
+      errLog.mock.restore();
+    }
+  }
+
+  it("잠금을 얻은 시점에 이미 세션이 만료됐으면 500이 아니라 401 + 쿠키 삭제", async () => {
+    // 잠금 대기 중에 시간이 흐른 상황: 토큰 행 잠금 조회 직전에 시계를 앞당긴다.
+    const { u, res, errLog } = await expireDuring(RefreshToken, "findOne", "rtr-expire-lock", { before: false });
+    // 첫 findOne(힌트) 직후 시계가 앞당겨지므로 트랜잭션 안에서 최신 시각으로 만료를 감지해야 한다.
+    assert.equal(res.status, 401);
+    assert.match(cookieFrom(res).raw, /refresh_token=;/);
+    assert.equal(errLog.mock.callCount(), 0, "500 오류 로그가 없어야 함");
+    const row = await RefreshToken.findOne({ where: { tokenHash: hashRefreshToken(u.refreshToken) } });
+    assert.equal(row.usedAt, null, "만료로 거절되었으므로 토큰은 소비되지 않음");
+  });
+
+  it("커밋 도중 세션이 만료돼 JWT 발급이 실패해도 500이 아니라 401 + 쿠키 삭제", async () => {
+    // 새 토큰 INSERT(트랜잭션 안) 직후 시계를 앞당겨 커밋 후 signAccessToken 에서 만료되게 한다.
+    const { res, errLog } = await expireDuring(RefreshToken, "create", "rtr-expire-commit");
+    assert.equal(res.status, 401);
+    assert.match(cookieFrom(res).raw, /refresh_token=;/);
+    assert.equal(errLog.mock.callCount(), 0, "500 오류 로그가 없어야 함");
+  });
 });
 
 describe("POST /api/auth/logout", () => {

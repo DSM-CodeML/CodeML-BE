@@ -24,6 +24,14 @@ export function isWellFormedRefreshToken(token) {
 
 // ---------- 액세스 JWT ----------
 
+// 로그인(세션)이 이미 만료되어 액세스 토큰을 만들 수 없을 때 던진다. 그 밖의 서명 오류와 구분하기 위한 전용 예외.
+export class SessionExpiredError extends Error {
+  constructor() {
+    super("이미 만료된 로그인에 대해 액세스 토큰을 발급할 수 없습니다.");
+    this.name = "SessionExpiredError";
+  }
+}
+
 /**
  * 액세스 JWT 발급. 만료는 min(지금+15분, 로그인 만료시각) 이다.
  * @returns {{ accessToken: string, expiresIn: number }} expiresIn은 초 단위
@@ -33,8 +41,8 @@ export function signAccessToken({ userId, sessionId, sessionExpiresAt }) {
   const sessionExpSec = Math.floor(sessionExpiresAt.getTime() / 1000);
   const expiresIn = Math.min(ACCESS_TOKEN_TTL_SEC, sessionExpSec - nowSec);
   if (expiresIn <= 0) {
-    // 호출 측에서 세션 만료를 먼저 확인하므로 정상 흐름에서는 오지 않는다.
-    throw new Error("이미 만료된 로그인에 대해 액세스 토큰을 발급할 수 없습니다.");
+    // 호출 측에서 세션 만료를 먼저 확인하지만, 커밋 도중 만료될 수 있어 전용 예외로 알린다.
+    throw new SessionExpiredError();
   }
   const accessToken = jwt.sign({ sid: sessionId }, env.jwt.secret, {
     algorithm: "HS256",
