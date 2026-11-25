@@ -44,6 +44,6 @@ INSERT INTO problem_cases (problem_id, ord, input_text, expected_output, is_samp
  (4, 1, 'learn python with codeml', '4', 1),
  (4, 2, 'one', '1', 0),
  (4, 3, 'a  b   c', '3', 0),
- (5, 1, '7\n3', 'DOWN', 1),
- (5, 2, '3\n7', 'UP', 0),
+ (5, 1, '7\n3', 'UP', 1),
+ (5, 2, '3\n7', 'DOWN', 0),
  (5, 3, '5\n5', 'CORRECT', 0);

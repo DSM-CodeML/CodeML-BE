@@ -20,7 +20,8 @@ app.use(
   }),
 );
 
-app.use(express.json({ limit: "16kb" }));
+// 코드 8,000자(MAX_CODE_LENGTH)가 JSON 이스케이프(\uXXXX, 최대 6바이트/자)돼도 들어오도록 바이트 기준으로 여유 있게 잡는다.
+app.use(express.json({ limit: "64kb" }));
 app.use(cookieParser());
 
 app.get("/api/health", (req, res) => {
