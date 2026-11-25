@@ -32,6 +32,15 @@ if (Buffer.byteLength(jwtSecret, "utf8") < 32) {
   );
 }
 
+// 채점 실행 방식. docker(기본)는 격리된 컨테이너, local 은 서버에서 바로 실행(격리 없음, 개발용).
+const judgeRunner = process.env.JUDGE_RUNNER?.trim() || "docker";
+if (!["docker", "local"].includes(judgeRunner)) {
+  throw new Error(`JUDGE_RUNNER는 docker 또는 local 이어야 합니다. (현재: ${judgeRunner})`);
+}
+if (judgeRunner === "local" && process.env.NODE_ENV === "production") {
+  throw new Error("운영 환경(NODE_ENV=production)에서는 JUDGE_RUNNER=local(격리 없음)을 쓸 수 없습니다.");
+}
+
 export const env = Object.freeze({
   nodeEnv: process.env.NODE_ENV ?? "development",
   isProduction: process.env.NODE_ENV === "production",
@@ -48,7 +57,12 @@ export const env = Object.freeze({
     name: required("DB_NAME"),
   },
 
-  // 채점에 쓰는 파이썬 실행 파일. 기본값: Windows 는 python, 그 외는 python3
+  judge: {
+    runner: judgeRunner,
+    dockerImage: process.env.JUDGE_DOCKER_IMAGE?.trim() || "python:3.12-slim",
+  },
+
+  // (JUDGE_RUNNER=local 전용) 채점에 쓰는 파이썬 실행 파일. 기본값: Windows 는 python, 그 외는 python3
   pythonBin: process.env.PYTHON_BIN?.trim() || (process.platform === "win32" ? "python" : "python3"),
 
   googleClientId: required("GOOGLE_CLIENT_ID"),

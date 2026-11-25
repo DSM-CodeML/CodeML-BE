@@ -1,4 +1,5 @@
 // 통합 테스트 공통 준비: 실제 MySQL(테스트 DB) + 실제 Express 서버 + 구글 검증 경계만 모킹.
+import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mock } from "node:test";
 import { OAuth2Client, gaxios } from "google-auth-library";
@@ -16,6 +17,14 @@ process.env.DB_PORT ??= "3307";
 process.env.DB_USER ??= "codeml";
 process.env.DB_PASSWORD ??= "codeml";
 process.env.DB_NAME ??= "codeml_test";
+
+// 채점 방식: 지정이 없으면 Docker 와 채점 이미지가 준비돼 있을 때 docker, 아니면 local 로 돈다.
+if (!process.env.JUDGE_RUNNER) {
+  const image = process.env.JUDGE_DOCKER_IMAGE || "python:3.12-slim";
+  const ready = spawnSync("docker", ["image", "inspect", image], { stdio: "ignore" }).status === 0;
+  process.env.JUDGE_RUNNER = ready ? "docker" : "local";
+  if (!ready) console.warn(`[test] Docker 또는 ${image} 이미지가 없어 JUDGE_RUNNER=local 로 채점 테스트를 돌립니다.`);
+}
 
 if (!process.env.DB_NAME.endsWith("_test")) {
   throw new Error("테스트는 테이블을 지우므로 DB_NAME이 _test 로 끝나는 DB에서만 실행합니다.");
