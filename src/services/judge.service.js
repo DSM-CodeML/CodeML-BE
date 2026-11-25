@@ -123,6 +123,7 @@ function dockerArgs(name) {
     "--pull", "never", // 요청 중에 이미지를 내려받지 않는다. 없으면 바로 실패시키고 안내한다.
     "--name", name,
     "--label", "codeml-judge=1",
+    "--init", // PID 1 에 init 을 두어 제출 코드가 남긴 고아(좀비) 프로세스를 수거한다(--pids-limit 소진 방지)
     "--network", "none",
     "--read-only",
     "--tmpfs", "/tmp:rw,nosuid,nodev,size=16m",
@@ -173,16 +174,18 @@ async function* runInDocker(code, inputs) {
     spawn("docker", ["kill", name], { stdio: "ignore", windowsHide: true }).on("error", () => {});
     child.kill("SIGKILL");
   };
+  const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
   // 컨테이너가 응답 없이 멈춰도 요청이 끝나도록 전체 기한을 둔다.
+  // stdout 을 destroy 해도 readline 반복은 끝나지 않으므로 인터페이스를 직접 닫아 아래의 "결과 부족 → 503" 으로 보낸다.
   const watchdog = setTimeout(() => {
     stopContainer();
+    lines.close();
     child.stdout.destroy();
   }, DOCKER_START_GRACE_MS + inputs.length * (TIME_LIMIT_MS + PER_CASE_GRACE_MS));
 
   const closed = new Promise((resolve) => child.on("close", resolve));
   let received = 0;
   try {
-    const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
     for await (const line of lines) {
       if (!line) continue;
       received += 1;
