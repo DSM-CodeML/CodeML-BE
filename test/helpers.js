@@ -1,7 +1,7 @@
 // 통합 테스트 공통 준비: 실제 MySQL(테스트 DB) + 실제 Express 서버 + 구글 검증 경계만 모킹.
 import { randomBytes } from "node:crypto";
 import { mock } from "node:test";
-import { OAuth2Client } from "google-auth-library";
+import { OAuth2Client, gaxios } from "google-auth-library";
 
 export const ORIGIN = "http://localhost:5173";
 export const GOOGLE_CLIENT_ID = "test-client-id.apps.googleusercontent.com";
@@ -28,9 +28,8 @@ mock.method(OAuth2Client.prototype, "verifyIdToken", async ({ idToken, audience 
   googleCalls.push({ audience });
   if (audience !== GOOGLE_CLIENT_ID) throw new Error("Wrong recipient, payload audience != requiredAudience");
   if (idToken === "network-failure") {
-    const err = new Error("request to https://www.googleapis.com/oauth2/v1/certs failed");
-    err.name = "GaxiosError";
-    throw err;
+    // 실제 라이브러리가 던지는 것과 같은 타입(name 은 "Error" 그대로)으로 재현한다.
+    throw new gaxios.GaxiosError("request to https://www.googleapis.com/oauth2/v1/certs failed", {});
   }
   const [prefix, sub, email, name] = idToken.split("|");
   if (prefix !== "google" || !sub) throw new Error(`Invalid token signature: ${idToken}`);

@@ -44,7 +44,8 @@ export function signAccessToken({ userId, sessionId, sessionExpiresAt }) {
     // 호출 측에서 세션 만료를 먼저 확인하지만, 커밋 도중 만료될 수 있어 전용 예외로 알린다.
     throw new SessionExpiredError();
   }
-  const accessToken = jwt.sign({ sid: sessionId }, env.jwt.secret, {
+  // iat 를 명시해 만료 계산과 서명이 같은 시각을 쓰게 한다(초가 바뀌어도 exp 가 세션 만료를 넘지 않음).
+  const accessToken = jwt.sign({ sid: sessionId, iat: nowSec }, env.jwt.secret, {
     algorithm: "HS256",
     subject: String(userId),
     issuer: env.jwt.issuer,

@@ -48,9 +48,10 @@ export async function findOrCreateGoogleUser({ googleSub, email, name }) {
     }
   }
 
-  user.lastLoginAt = now;
-  if (email !== null) user.email = email; // 구글 쪽 이메일이 바뀌었을 수 있으므로 갱신(확인된 이메일만)
-  await user.save({ fields: ["lastLoginAt", "email"] });
+  // 동시 로그인에서 늦게 끝난 요청이 더 최신 시각을 과거로 덮지 않도록 DB에서 큰 값을 유지한다.
+  const changes = { lastLoginAt: sequelize.fn("GREATEST", sequelize.col("last_login_at"), now) };
+  if (email !== null) changes.email = email; // 구글 쪽 이메일이 바뀌었을 수 있으므로 갱신(확인된 이메일만)
+  await User.update(changes, { where: { id: user.id } });
   return user;
 }
 

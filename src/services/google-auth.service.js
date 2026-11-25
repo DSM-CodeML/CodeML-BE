@@ -1,3 +1,4 @@
+import { gaxios } from "google-auth-library";
 import { GOOGLE_CLIENT_ID, googleClient } from "../config/google.js";
 import { HttpError, unauthorized } from "../utils/http-error.js";
 
@@ -33,10 +34,11 @@ export async function verifyGoogleToken(idToken) {
   };
 }
 
-// 토큰 검증 실패는 일반 Error로 던져지고, 네트워크/HTTP 실패는 GaxiosError(또는 시스템 오류 코드)로 던져진다.
+// 토큰 검증 실패는 일반 Error로 던져지고, 공개키 조회(네트워크/HTTP/시간 초과) 실패는 GaxiosError로 던져진다.
+// GaxiosError 는 name 을 바꾸지 않으므로 이름이 아니라 실제 타입으로 구분한다.
 function isGoogleConnectivityError(err) {
   return (
-    err?.name === "GaxiosError" ||
+    err instanceof gaxios.GaxiosError ||
     err?.response !== undefined ||
     (typeof err?.code === "string" && /^E[A-Z]+/.test(err.code))
   );

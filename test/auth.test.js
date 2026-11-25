@@ -27,8 +27,11 @@ before(async () => {
 });
 
 after(async () => {
-  await new Promise((r) => server.close(r));
-  await sequelize.close();
+  try {
+    if (server) await new Promise((r) => server.close(r));
+  } finally {
+    await sequelize.close();
+  }
 });
 
 async function sessionOf(refreshToken) {
@@ -379,21 +382,23 @@ describe("POST /api/auth/refresh (RTR)", () => {
   });
 
   // 처리 도중 시간이 흘러 세션이 만료되는 경우를 Date.now 를 앞당겨 재현한다.
-  async function expireDuring(target, method, sub, { before: advanceBefore = false } = {}) {
+  // 시계는 고정해 두고(요청 처리가 느려도 저절로 만료되지 않게), when(args) 가 참인 호출에서만 앞당긴다.
+  async function expireDuring(target, method, sub, { before: advanceBefore = false, when = () => true } = {}) {
     const u = await login(base, sub);
     const s = await sessionOf(u.refreshToken);
     const soon = new Date(Math.floor(Date.now() / 1000) * 1000 + 3_000); // 3초 뒤 만료
     await s.update({ expiresAt: soon });
     await RefreshToken.update({ expiresAt: soon }, { where: { sessionId: s.id } });
 
-    const realNow = Date.now.bind(Date);
+    const frozen = Date.now();
     let offset = 0;
-    const clock = mock.method(Date, "now", () => realNow() + offset);
+    const clock = mock.method(Date, "now", () => frozen + offset);
     const original = target[method].bind(target);
     const spy = mock.method(target, method, async (...args) => {
-      if (advanceBefore) offset = 10_000;
+      const advance = when(args);
+      if (advance && advanceBefore) offset = 10_000;
       const result = await original(...args);
-      if (!advanceBefore) offset = 10_000;
+      if (advance && !advanceBefore) offset = 10_000;
       return result;
     });
     const errLog = mock.method(console, "error", () => {});
@@ -408,8 +413,11 @@ describe("POST /api/auth/refresh (RTR)", () => {
 
   it("잠금을 얻은 시점에 이미 세션이 만료됐으면 500이 아니라 401 + 쿠키 삭제", async () => {
     // 잠금 대기 중에 시간이 흐른 상황: 토큰 행 잠금 조회 직전에 시계를 앞당긴다.
-    const { u, res, errLog } = await expireDuring(RefreshToken, "findOne", "rtr-expire-lock", { before: false });
-    // 첫 findOne(힌트) 직후 시계가 앞당겨지므로 트랜잭션 안에서 최신 시각으로 만료를 감지해야 한다.
+    const { u, res, errLog } = await expireDuring(RefreshToken, "findOne", "rtr-expire-lock", {
+      before: false,
+      when: ([opts]) => Boolean(opts?.lock), // 힌트 조회가 아니라 잠금 조회 직후에만 시계를 앞당긴다
+    });
+    // 잠금을 얻은 뒤의 시각으로 만료를 판단해야 한다. 잠금 전에 시각을 읽으면 토큰이 소비돼 아래 단언에서 실패한다.
     assert.equal(res.status, 401);
     assert.match(cookieFrom(res).raw, /refresh_token=;/);
     assert.equal(errLog.mock.callCount(), 0, "500 오류 로그가 없어야 함");
@@ -419,10 +427,14 @@ describe("POST /api/auth/refresh (RTR)", () => {
 
   it("커밋 도중 세션이 만료돼 JWT 발급이 실패해도 500이 아니라 401 + 쿠키 삭제", async () => {
     // 새 토큰 INSERT(트랜잭션 안) 직후 시계를 앞당겨 커밋 후 signAccessToken 에서 만료되게 한다.
-    const { res, errLog } = await expireDuring(RefreshToken, "create", "rtr-expire-commit");
+    const { u, res, errLog } = await expireDuring(RefreshToken, "create", "rtr-expire-commit");
     assert.equal(res.status, 401);
     assert.match(cookieFrom(res).raw, /refresh_token=;/);
     assert.equal(errLog.mock.callCount(), 0, "500 오류 로그가 없어야 함");
+    // 잠금 단계 만료가 아니라 커밋 이후 만료임을 확인: 이전 토큰은 소비됐고 교체 토큰 행이 커밋돼 있어야 한다.
+    const old = await RefreshToken.findOne({ where: { tokenHash: hashRefreshToken(u.refreshToken) } });
+    assert.notEqual(old.usedAt, null, "이전 토큰이 소비돼야 함");
+    assert.equal(await RefreshToken.count({ where: { sessionId: old.sessionId } }), 2, "교체 토큰이 커밋돼야 함");
   });
 });
 
