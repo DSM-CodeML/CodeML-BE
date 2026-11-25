@@ -14,14 +14,17 @@ import { notFound } from "../utils/http-error.js";
 
 export const DAILY_XP_GOAL = 50;
 export const LESSON_STATUS = Object.freeze({ DONE: "done", CURRENT: "current", TODO: "todo", LOCKED: "locked" });
+// current 뒤로 미리 열어 두는(todo) 레슨 수. 그보다 뒤는 locked. (프론트 trail.html 목업: current 3 → 4·5·6 todo, 7 locked)
+export const TODO_WINDOW = 3;
 
 /**
  * 트레일 하나(현재는 ord 가 가장 앞선 대표 트레일)와 내 진행 상황.
  * 레슨 상태:
  *   - done    : 문제가 있고 전부 정답을 냈다
  *   - current : 트레일 전체에서 done 이 아닌 첫 레슨(최대 1개)
- *   - todo    : current 뒤의 같은 챕터 레슨
- *   - locked  : current 가 속한 챕터의 다음 챕터부터
+ *   - todo    : current 뒤로 같은 챕터 안의 TODO_WINDOW 개
+ *   - locked  : 그보다 뒤의 레슨, 그리고 current 가 속한 챕터의 다음 챕터부터
+ *   (done 이 가장 우선한다: current 보다 뒤라도 다 풀었으면 done)
  * now 는 테스트에서 "오늘"(KST)을 고정하려는 값이다. 컨트롤러는 넘기지 않는다.
  */
 export async function getTrail(userId, { now = new Date() } = {}) {
@@ -71,22 +74,24 @@ export async function getTrail(userId, { now = new Date() } = {}) {
         return { chapterOrd: ch.ord, lesson: l, steps, all, done: all.length > 0 && all.every((p) => p.done) };
       }),
   );
-  const current = ordered.find((x) => !x.done) ?? null;
+  const currentIdx = ordered.findIndex((x) => !x.done);
+  const current = currentIdx === -1 ? null : ordered[currentIdx];
 
-  const statusOf = (x) => {
+  const statusOf = (x, i) => {
     if (x.done) return LESSON_STATUS.DONE;
-    if (x === current) return LESSON_STATUS.CURRENT;
-    return x.chapterOrd === current.chapterOrd ? LESSON_STATUS.TODO : LESSON_STATUS.LOCKED;
+    if (i === currentIdx) return LESSON_STATUS.CURRENT;
+    const open = x.chapterOrd === current.chapterOrd && i - currentIdx <= TODO_WINDOW;
+    return open ? LESSON_STATUS.TODO : LESSON_STATUS.LOCKED;
   };
   const byLesson = new Map(
-    ordered.map((x) => [
+    ordered.map((x, i) => [
       x.lesson.id,
       {
         id: x.lesson.id,
         n: x.lesson.ord,
         title: x.lesson.title,
         tag: x.lesson.tag,
-        status: statusOf(x),
+        status: statusOf(x, i),
         steps: x.steps,
         // 안 푼 첫 문제, 다 풀었으면 첫 문제, 문제가 없으면 null
         startProblemId: (x.all.find((p) => !p.done) ?? x.all[0])?.id ?? null,

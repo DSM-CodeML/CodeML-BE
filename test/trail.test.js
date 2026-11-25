@@ -55,7 +55,7 @@ describe("GET /api/trail", () => {
     assert.equal((await res.json()).status, "error");
   });
 
-  it("신규 회원: 첫 레슨이 current, 같은 챕터는 todo, 진행 0", async () => {
+  it("신규 회원: 첫 레슨이 current, 다음 3개는 todo, 그 뒤는 locked, 진행 0", async () => {
     const { accessToken } = await newMember("trail-new");
     const res = await getTrail(accessToken);
     assert.equal(res.status, 200);
@@ -71,7 +71,7 @@ describe("GET /api/trail", () => {
       lessonsOf(body).map((l) => `${l.n}. ${l.title}`),
       ["1. Hello, World", "2. Variables & types", "3. Printing & formatting", "4. Input & output", "5. Conditionals", "6. Loops", "7. Functions"],
     );
-    assert.deepEqual(statuses(body), ["current", "todo", "todo", "todo", "todo", "todo", "todo"]);
+    assert.deepEqual(statuses(body), ["current", "todo", "todo", "todo", "locked", "locked", "locked"]);
     assert.equal(body.currentLessonId, lessonsOf(body)[0].id);
     assert.equal(body.streak, 0);
     assert.deepEqual(body.xp, { today: 0, goal: 50 });
@@ -93,16 +93,26 @@ describe("GET /api/trail", () => {
     const { userId, accessToken } = await newMember("trail-next");
     await markSolved(userId, 1); // Hello, World 레슨의 유일한 문제
     const body = await trailOf(accessToken);
-    assert.deepEqual(statuses(body).slice(0, 3), ["done", "current", "todo"]);
+    assert.deepEqual(statuses(body), ["done", "current", "todo", "todo", "todo", "locked", "locked"]);
     assert.equal(body.currentLessonId, lessonsOf(body)[1].id);
     assert.equal(lessonsOf(body)[0].steps[0].problems[0].done, true);
+  });
+
+  it("trail.html 목업과 같은 상태: 레슨 1·2 완료 → done done current todo todo todo locked", async () => {
+    const { userId, accessToken } = await newMember("trail-mockup");
+    await markSolved(userId, 1, 3);
+    const body = await trailOf(accessToken);
+    assert.deepEqual(statuses(body), ["done", "done", "current", "todo", "todo", "todo", "locked"]);
+    const current = lessonsOf(body).find((l) => l.status === "current");
+    assert.equal(body.currentLessonId, current.id);
+    assert.deepEqual([current.n, current.title, current.tag], [3, "Printing & formatting", "Foundation"]);
   });
 
   it("current 보다 뒤의 레슨도 다 풀었으면 done", async () => {
     const { userId, accessToken } = await newMember("trail-skip");
     await markSolved(userId, 5); // Conditionals 만 풀었다
     const body = await trailOf(accessToken);
-    assert.deepEqual(statuses(body), ["current", "todo", "todo", "todo", "done", "todo", "todo"]);
+    assert.deepEqual(statuses(body), ["current", "todo", "todo", "todo", "done", "locked", "locked"]);
   });
 
   it("문제가 없는 레슨은 done 이 되지 않고, startProblemId 는 null", async () => {
