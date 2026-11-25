@@ -40,14 +40,15 @@ describe("인증", () => {
 });
 
 describe("GET /api/curriculum", () => {
-  it("신규 회원: 주차 5개, 1주차 문제 5개, 진행 0", async () => {
+  it("신규 회원: 주차 5개, 1주차 문제 12개, 진행 0", async () => {
     const { accessToken } = await newMember("cur-new");
     const res = await api(accessToken, "/curriculum");
     assert.equal(res.status, 200);
     assert.equal(res.headers.get("cache-control"), "no-store");
     const body = await res.json();
     assert.deepEqual(body.weeks.map((w) => w.n), ["1", "2", "3", "4", "5-6"]);
-    assert.equal(body.weeks[0].problems.length, 5);
+    assert.equal(body.weeks[0].problems.length, 12); // 1~5번 + 트레일 "Printing & formatting" 6~12번
+    assert.equal(body.weeks[0].total, 12);
     assert.ok(body.weeks.every((w) => w.solved === 0));
     assert.equal(body.weeks[4].optional, true);
     assert.equal(body.last, null);
