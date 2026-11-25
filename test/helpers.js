@@ -54,12 +54,16 @@ export const models = {
   ...(await import("../src/models/auth-session.model.js")),
   ...(await import("../src/models/refresh-token.model.js")),
   ...(await import("../src/models/user-activity.model.js")),
+  ...(await import("../src/models/week.model.js")),
+  ...(await import("../src/models/problem.model.js")),
+  ...(await import("../src/models/problem-case.model.js")),
+  ...(await import("../src/models/submission.model.js")),
 };
 export { sequelize, app };
 
 export async function resetDatabase() {
   await sequelize.query("SET FOREIGN_KEY_CHECKS = 0");
-  for (const t of ["user_activities", "refresh_tokens", "auth_sessions", "users", "schema_migrations"]) {
+  for (const t of ["submissions", "problem_cases", "problems", "weeks", "user_activities", "refresh_tokens", "auth_sessions", "users", "schema_migrations"]) {
     await sequelize.query(`DROP TABLE IF EXISTS \`${t}\``);
   }
   await sequelize.query("SET FOREIGN_KEY_CHECKS = 1");

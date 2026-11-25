@@ -8,6 +8,7 @@ import {
   issueLoginTokens,
   logoutSession,
   rotateRefreshToken,
+  updateNickname,
 } from "../services/auth.service.js";
 import { badRequest, unauthorized } from "../utils/http-error.js";
 
@@ -57,7 +58,19 @@ export async function me(req, res) {
   // 클라이언트가 보낸 userId가 아니라 검증된 토큰의 회원만 조회한다.
   const user = await findUserById(req.auth.userId);
   if (!user) throw unauthorized("회원 정보를 찾을 수 없습니다.");
-  res.json({ user: { id: user.id, nickname: user.nickname, email: user.email } });
+  res.json({ user: { id: user.id, nickname: user.nickname, email: user.email, xp: user.xp } });
+}
+
+// PATCH /api/auth/me  { nickname }  (requireAuth 뒤에서 실행 — 토큰의 회원 본인만 수정한다)
+// 닉네임은 중복을 허용한다(DB에 UNIQUE 없음). 같은 이름이 필요해지면 UNIQUE 와 409 를 추가한다.
+export async function updateMe(req, res) {
+  const nickname = typeof req.body?.nickname === "string" ? req.body.nickname.trim() : "";
+  const length = Array.from(nickname).length; // 이모지도 1글자로 센다
+  if (length < 2 || length > 30 || !/^[\p{L}\p{N}_]+$/u.test(nickname)) {
+    throw badRequest("닉네임은 2~30자의 글자, 숫자, 밑줄(_)만 쓸 수 있습니다.");
+  }
+  const user = await updateNickname(req.auth.userId, nickname);
+  res.json({ user: { id: user.id, nickname: user.nickname, email: user.email, xp: user.xp } });
 }
 
 // POST /api/auth/refresh  (refresh_token 쿠키)

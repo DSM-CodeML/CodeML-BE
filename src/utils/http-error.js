@@ -10,4 +10,5 @@ export class HttpError extends Error {
 
 export const badRequest = (msg = "잘못된 요청입니다.") => new HttpError(400, msg);
 export const unauthorized = (msg = "인증이 필요합니다.") => new HttpError(401, msg);
+export const notFound = (msg = "대상을 찾을 수 없습니다.") => new HttpError(404, msg);
 export const forbidden = (msg = "허용되지 않은 요청입니다.") => new HttpError(403, msg);

@@ -9,6 +9,7 @@ export const User = sequelize.define(
     googleSub: { type: DataTypes.STRING(255), allowNull: false, unique: true, field: "google_sub" },
     email: { type: DataTypes.STRING(254), allowNull: true },
     nickname: { type: DataTypes.STRING(50), allowNull: false },
+    xp: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, defaultValue: 0 }, // 문제를 처음 맞힐 때마다 problems.xp 만큼 증가
     createdAt: { type: DataTypes.DATE, allowNull: false, field: "created_at" },
     lastLoginAt: { type: DataTypes.DATE, allowNull: false, field: "last_login_at" },
   },

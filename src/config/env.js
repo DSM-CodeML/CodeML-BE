@@ -48,6 +48,9 @@ export const env = Object.freeze({
     name: required("DB_NAME"),
   },
 
+  // 채점에 쓰는 파이썬 실행 파일. 기본값: Windows 는 python, 그 외는 python3
+  pythonBin: process.env.PYTHON_BIN?.trim() || (process.platform === "win32" ? "python" : "python3"),
+
   googleClientId: required("GOOGLE_CLIENT_ID"),
 
   jwt: {

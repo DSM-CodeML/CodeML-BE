@@ -7,6 +7,7 @@ import { env } from "./config/env.js";
 import { sequelize } from "./config/db.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { grassRouter } from "./routes/grass.routes.js";
+import { problemRouter } from "./routes/problem.routes.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error.middleware.js";
 
 export const app = express();
@@ -31,6 +32,7 @@ app.get("/api/health", (req, res) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/grass", grassRouter);
+app.use("/api", problemRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

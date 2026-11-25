@@ -231,7 +231,7 @@ describe("GET /api/auth/me 와 Bearer 인증", () => {
     const res = await getMe(base, user.accessToken);
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), {
-      user: { id: user.body.user.id, nickname: "user-me-user", email: "me-user@example.com" },
+      user: { id: user.body.user.id, nickname: "user-me-user", email: "me-user@example.com", xp: 0 },
     });
   });
 

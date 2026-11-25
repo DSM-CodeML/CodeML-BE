@@ -215,5 +215,10 @@ export async function isSessionActiveForUser(sessionId, userId) {
 }
 
 export async function findUserById(userId) {
-  return User.findByPk(userId, { attributes: ["id", "nickname", "email"] });
+  return User.findByPk(userId, { attributes: ["id", "nickname", "email", "xp"] });
+}
+
+export async function updateNickname(userId, nickname) {
+  await User.update({ nickname }, { where: { id: userId } });
+  return findUserById(userId);
 }
